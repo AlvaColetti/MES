@@ -7,15 +7,17 @@ class EnergySystem:
     
     def __init__(self, consumer: Consumer, battery: Battery, pvSystem: PVSystem):
         self.loadProfile = consumer
-        self.battery = battery
         self.pvSystem = pvSystem
+        self.battery = battery
         self.checkDataFrames()
     
     def simulate(self):
         for i in range(0,len(self.loadProfile.profile)-1):
             consumption = self.loadProfile.profile.iloc[i,0]
             generation = self.pvSystem.profile.iloc[i,0]
-            self.battery.simulate_responde(float(generation)-float(consumption))
+            
+            demandedEnergy = float(generation)-float(consumption)
+            self.battery.simulate_responde(demandedEnergy)
             
             print("/{}/".format(i))
             print("Consumption: {} kW / Generation: {} kW".format(consumption,generation))
