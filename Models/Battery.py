@@ -27,10 +27,26 @@ class Battery:
         self.dechargingEffiency = 1
         self.standByLosses = 0
         self.Resolution = 1
+        self.technology = "Standard"
 
         self.powerThrouhput = 0
+        self.operation_consumption = 0
+        self.operation_energy = 0
 
     
+    def set_operation_consumption(self, operation_consumption: float):
+        """ 
+        Sets
+        --------
+            Operation consumption of the battery. Energy needed so that the battery can work
+
+        Parameters
+        ----------
+            operation_consumption: float
+                consumption in W
+        """
+        self.operation_consumption = operation_consumption/1000
+
     def set_efficiencies(self, chargingEffiency: float, dechargingEfficiency: float):
         """ 
         Sets
@@ -58,7 +74,7 @@ class Battery:
             Parameters
             ----------
             hourly_loss: float
-                losses per hour pass relative to the current state in %
+                losses per hour relative to the current state in %
         """
         if (hourly_loss > 1):
             raise ValueError('Losses per hour are to high')
@@ -105,15 +121,19 @@ class Battery:
             self.powerThrouhput = demandedPower
     
     def __calculate_demanded_energy(self):
+        self.operation_energy = self.operation_consumption*self.Resolution
         if numpy.sign(self.powerThrouhput) == 1:
-            return self.powerThrouhput*self.chargingEffiency*self.Resolution
+            return (self.powerThrouhput * self.chargingEffiency) * self.Resolution - self.operation_energy
         else:
-            return self.powerThrouhput/ self.dechargingEffiency * self.Resolution
+            return (self.powerThrouhput / self.dechargingEffiency) * self.Resolution - self.operation_energy
     
     def simulate_responde(self, demandedPower):
         self.__calculate_power_throughput(demandedPower)
         demanded_energy = self.__calculate_demanded_energy()
         self.__calculate_state_energy_change(demanded_energy)
 
-    def print_info(self, index):
-        print("{} // Current energy storaged {} kWh \n last power throuput {} kW".format(index, self.state, self.powerThrouhput))
+    def print_info(self):
+        info = "Battery specifications \n" + "capacity [kWh]: {} || maximum power [kW]: {}\n"
+        info += "charging efficiency [%]: {} || decharging efficiency [%]: {} || standby losses [%/h]: {} \n"
+        info = info.format(self.capacity, self.maxPower, self.chargingEffiency, self.dechargingEffiency, self.standByLosses)
+        print(info)

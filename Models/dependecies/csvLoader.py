@@ -9,5 +9,8 @@ class CsvLoader:
         self.profile : pd.DataFrame
         pass
 
-    def LoadProfile(self, profileCsv : string ):
+    def load_profile(self, profileCsv : string ):
         self.profile = pd.read_csv(profileCsv, delimiter=";")
+    
+    def get_profile_count(self):
+        return len(self.profile)
