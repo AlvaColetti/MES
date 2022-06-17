@@ -2,7 +2,7 @@ import numpy
 
 class Battery:
 
-    def __init__(self, capacity: float, maxPower: float, initialState: float = 0 ):
+    def __init__(self, capacity: float, minPower:float, maxPower: float, initialState: float = 0 ):
         """ 
         Retunrs
         --------
@@ -13,26 +13,45 @@ class Battery:
             capacity: float
                 the maximum battery capacity in kWh
             
-            maxpower: float
+            max_power: float
                 the maximum battery output and input power in kW
+            
+            min_power: float
+                the minimum battery output and input power in kW
             
             initalState: float
                 kWh of saved energy at the start of the simulation
     
         """
-        self.capacity = capacity
-        self.maxPower = maxPower
-        self.state = initialState
+        # capacity
+        self.capacity = capacity # max capacity in kWh
+        self.state = initialState # current state in kWh
+
+        # power
+        self.max_power = maxPower # max power in kW
+        self.min_power = minPower # min power in kW
+        self.power_throuhput = 0 # current power in kW
+
+        # efficiencies
         self.chargingEffiency = 1
         self.dechargingEffiency = 1
         self.standByLosses = 0
-        self.Resolution = 1
-        self.technology = "Standard"
 
-        self.powerThrouhput = 0
+        # operation consumption
         self.operation_consumption = 0
+        self.current_operation_consumption = 0
         self.operation_energy = 0
 
+        # simulation parameters
+        self.Resolution = 1 # simulation resolution in minutes
+        self.technology = "Undefined"
+
+        #Cost
+        self.installation_cost = 0 #In Euro
+
+        #Degradation factors
+        self.capacity_degradation = 0 # degradation % per year
+        self.power_degradation = 0 # degradation % per year of maximum power
     
     def set_operation_consumption(self, operation_consumption: float):
         """ 
@@ -45,7 +64,7 @@ class Battery:
             operation_consumption: float
                 consumption in W
         """
-        self.operation_consumption = operation_consumption/1000
+        self.operation_consumption = operation_consumption
 
     def set_efficiencies(self, chargingEffiency: float, dechargingEfficiency: float):
         """ 
@@ -64,6 +83,20 @@ class Battery:
         """
         self.chargingEffiency = chargingEffiency/100
         self.dechargingEffiency = dechargingEfficiency/100
+    
+    def simulate_responde(self, demandedPower):
+        self.state = self.state*self.__calculate_standby_efficiency()
+
+        self.__calculate_soll_power(demandedPower)
+        demanded_energy = self.__calculate_demanded_energy()
+
+        self.__calculate_ist_power(demanded_energy)
+
+        self.__calculate_soll_power(self.power_throuhput)
+        demanded_energy = self.__calculate_demanded_energy()
+
+        self.__calculate_state_energy_change(demanded_energy)
+        self.degradate()
     
     def set_standby_losses(self, hourly_loss: float):
         """
@@ -105,35 +138,74 @@ class Battery:
             minutes: float
                 new resolution in minutes
         """
-        self.state = self.state*self.__calculate_standby_efficiency()
 
         if self.state + demandedEnergy >= self.capacity:
             self.state = self.capacity
+
         elif self.state + demandedEnergy < 0:
             self.state = 0
+
+            #self.power_throuhput = 0
+
         else:
             self.state = self.state + demandedEnergy
     
-    def __calculate_power_throughput(self, demandedPower):
-        if self.maxPower <= abs(demandedPower):
-            self.powerThrouhput = self.maxPower*numpy.sign(demandedPower)
-        elif self.maxPower > abs(demandedPower):
-            self.powerThrouhput = demandedPower
+    def __calculate_soll_power(self, demandedPower: float):
+        
+        if self.min_power > abs(demandedPower):
+            self.power_throuhput = 0
+            self.current_operation_consumption = 0
+
+        elif self.max_power <= abs(demandedPower):
+            self.power_throuhput = self.max_power*numpy.sign(demandedPower)
+            self.current_operation_consumption = self.operation_consumption
+
+        elif self.max_power > abs(demandedPower) and self.min_power <= abs(demandedPower):
+            self.power_throuhput = demandedPower
+            self.current_operation_consumption = self.operation_consumption
     
     def __calculate_demanded_energy(self):
-        self.operation_energy = self.operation_consumption*self.Resolution
-        if numpy.sign(self.powerThrouhput) == 1:
-            return (self.powerThrouhput * self.chargingEffiency) * self.Resolution - self.operation_energy
+
+        self.operation_energy = self.current_operation_consumption*self.Resolution
+
+        if numpy.sign(self.power_throuhput) == 1:
+            return (self.power_throuhput * self.chargingEffiency) * self.Resolution - self.operation_energy
         else:
-            return (self.powerThrouhput / self.dechargingEffiency) * self.Resolution - self.operation_energy
+            return (self.power_throuhput / self.dechargingEffiency) * self.Resolution - self.operation_energy
     
-    def simulate_responde(self, demandedPower):
-        self.__calculate_power_throughput(demandedPower)
-        demanded_energy = self.__calculate_demanded_energy()
-        self.__calculate_state_energy_change(demanded_energy)
+    def __calculate_ist_power(self, demanded_energy:float):
+        
+        if self.state + demanded_energy > self.capacity:
+            capacity_available = self.capacity - self.state
+
+            self.power_throuhput = (capacity_available / self.Resolution) / self.chargingEffiency
+
+        if self.state + demanded_energy < 0:
+            self.power_throuhput = (self.state  / self.Resolution) * self.dechargingEffiency * (-1) + self.current_operation_consumption
+
+    def setCost(self, installationCost: float):
+        self.installation_cost = installationCost
+    
+    def modify_power(self, max_power:float, min_power: float):
+        self.max_power = max_power
+        self.min_power = min_power
+
+    def set_degradation_factors(self, capacity_degradation, power_degradation: float):
+        self.capacity_degradation = capacity_degradation
+        self.power_degradation = power_degradation
+
+    def degradate(self):
+        minutes_per_year = 365 * 24 * 60
+        
+        self.max_power = round( self.max_power * ( 1 - (self.power_degradation / 100 /  minutes_per_year) * self.Resolution), 2)
+        self.capacity = round( self.capacity * ( 1 - (self.capacity_degradation / 100 /  minutes_per_year) * self.Resolution), 2)
 
     def print_info(self):
-        info = "Battery specifications \n" + "capacity [kWh]: {} || maximum power [kW]: {}\n"
+        info = "Battery specifications \n" + "capacity [kWh]: {} || maximum power [kW]: {} || min power [kW]: {}\n"
         info += "charging efficiency [%]: {} || decharging efficiency [%]: {} || standby losses [%/h]: {} \n"
-        info = info.format(self.capacity, self.maxPower, self.chargingEffiency, self.dechargingEffiency, self.standByLosses)
+        info += "capacity degradation [%/a]: {} || power degradation [%/a]: {} \n"
+        info += "Installation cost [€]: {}"
+        info = info.format(self.capacity, self.max_power, self.min_power, self.chargingEffiency *100, self.dechargingEffiency * 100, self.standByLosses,
+        self.capacity_degradation, self.power_degradation, self.installation_cost)
+
         print(info)
