@@ -26,6 +26,7 @@ class Battery:
         # capacity
         self.capacity = capacity # max capacity in kWh
         self.state = initialState # current state in kWh
+        self.stateChange = 0 # energy change in kWh
 
         # power
         self.max_power = maxPower # max power in kW
@@ -86,16 +87,9 @@ class Battery:
     
     def simulate_responde(self, demandedPower):
         self.state = self.state*self.__calculate_standby_efficiency()
-
-        self.__calculate_soll_power(demandedPower)
-        demanded_energy = self.__calculate_demanded_energy()
-
-        self.__calculate_ist_power(demanded_energy)
-
-        self.__calculate_soll_power(self.power_throuhput)
-        demanded_energy = self.__calculate_demanded_energy()
-
-        self.__calculate_state_energy_change(demanded_energy)
+        self.calculate_power_throuhput(demandedPower)
+        demanded_energy = self.calculate_demanded_energy()
+        self.calculate_state_energy_change(demanded_energy)
         self.degradate()
     
     def set_standby_losses(self, hourly_loss: float):
@@ -129,28 +123,24 @@ class Battery:
     def __calculate_standby_efficiency(self):
         return (1-(self.standByLosses/100)*self.Resolution)
 
-    def __calculate_state_energy_change(self, demandedEnergy):      
-        """
-            Calculates the new battery state
-            
-            Parameters
-            ----------
-            minutes: float
-                new resolution in minutes
-        """
+    def calculate_state_energy_change(self, demandedEnergy):
+        previousState = self.state
+        
+        if demandedEnergy >0:
+            a =10
 
         if self.state + demandedEnergy >= self.capacity:
             self.state = self.capacity
-
         elif self.state + demandedEnergy < 0:
             self.state = 0
-
-            #self.power_throuhput = 0
-
         else:
             self.state = self.state + demandedEnergy
+        
+
+
+        self.stateChange = self.state - previousState
     
-    def __calculate_soll_power(self, demandedPower: float):
+    def calculate_power_throuhput(self, demandedPower: float):
         
         if self.min_power > abs(demandedPower):
             self.power_throuhput = 0
@@ -164,7 +154,7 @@ class Battery:
             self.power_throuhput = demandedPower
             self.current_operation_consumption = self.operation_consumption
     
-    def __calculate_demanded_energy(self):
+    def calculate_demanded_energy(self):
 
         self.operation_energy = self.current_operation_consumption*self.Resolution
 
@@ -172,16 +162,6 @@ class Battery:
             return (self.power_throuhput * self.chargingEffiency) * self.Resolution - self.operation_energy
         else:
             return (self.power_throuhput / self.dechargingEffiency) * self.Resolution - self.operation_energy
-    
-    def __calculate_ist_power(self, demanded_energy:float):
-        
-        if self.state + demanded_energy > self.capacity:
-            capacity_available = self.capacity - self.state
-
-            self.power_throuhput = (capacity_available / self.Resolution) / self.chargingEffiency
-
-        if self.state + demanded_energy < 0:
-            self.power_throuhput = (self.state  / self.Resolution) * self.dechargingEffiency * (-1) + self.current_operation_consumption
 
     def setCost(self, installationCost: float):
         self.installation_cost = installationCost
@@ -201,10 +181,10 @@ class Battery:
         self.capacity = round( self.capacity * ( 1 - (self.capacity_degradation / 100 /  minutes_per_year) * self.Resolution), 2)
 
     def print_info(self):
-        info = "Battery specifications \n" + "capacity [kWh]: {} || maximum power [kW]: {} || min power [kW]: {}\n"
-        info += "charging efficiency [%]: {} || decharging efficiency [%]: {} || standby losses [%/h]: {} \n"
-        info += "capacity degradation [%/a]: {} || power degradation [%/a]: {} \n"
-        info += "Installation cost [€]: {}"
+        info = "***Battery specifications***\n" + "\tcapacity [kWh]: {} || maximum power [kW]: {} || min power [kW]: {}\n"
+        info += "\tcharging efficiency [%]: {} || decharging efficiency [%]: {} || standby losses [%/h]: {} \n"
+        info += "\tcapacity degradation [%/a]: {} || power degradation [%/a]: {} \n"
+        info += "\tInstallation cost [€]: {}\n"
         info = info.format(self.capacity, self.max_power, self.min_power, self.chargingEffiency *100, self.dechargingEffiency * 100, self.standByLosses,
         self.capacity_degradation, self.power_degradation, self.installation_cost)
 

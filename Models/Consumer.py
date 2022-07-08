@@ -10,7 +10,13 @@ class Consumer(CsvLoader):
         pass
 
     def GetPeak(self) -> float:
-         max(self.profile)
+        return self.profile["Leistung"].max()
     
     def GetBaseLoad(self) -> float:
-        min(self.profile)
+        return self.profile["Leistung"].min()
+    
+    def print_info(self):
+        message = "***Consumer***\n"
+        message += "\t Peak load: " + str(self.GetPeak()) + " kW\n"
+        message += "\t Base load: " + str(self.GetBaseLoad()) + " kW\n\n"
+        print(message)
