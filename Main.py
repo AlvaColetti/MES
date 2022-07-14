@@ -1,46 +1,44 @@
-from Models.Consumer import Consumer
-from Models.PVSystem import PV_System
-from Models.EnergySystem import EnergySystem
-from Models.analyzers.eco_analyzer import Eco_Analyzer
-from Models.analyzers.financial_analyzer import Financial_Analyzer
-from Models.battery_factory import Battery_factory
+from models.consumption import Consumption
+from models.pv_system import PV_System
+from models.energy_system import EnergySystem
+from models.simulation_evaluators.sustainability_evaluator import SustainabilityEvaluator
+from models.simulation_evaluators.financial_analyzer import FinancialEvaluator
+from models.battery_factory import BatteryFactory
 
 PV_PROFILE_PATH = "C:\\Users\\alva-coletti\\Desktop\\MES\\Profiles\\PV_Production.csv"
 CONSUMER_PROFILE_PATH = "C:\\Users\\alva-coletti\\Desktop\\MES\\Profiles\\Load_Production.csv"
 
-factory = Battery_factory()
+factory = BatteryFactory() # erzeuge einen Objekt der Klasse Battery_factory
 
-LiB = factory.create_LiB_LFP_BYD_from_parameter("capacity", 40) #Building battery according to characteristic
-LiB.set_degradation_factors(1,1) #Degradation for power and capacity in %/a
-LiB.set_standby_losses(1) #losses per hour in %/h
-LiB.set_resolution_in_minutes(30) # setting system resolution
-LiB.print_info() # displaying battery information
+LiB = factory.create_LiB_LFP_BYD_from_parameter("capacity", 40) # erzeuge eine LFP Batterie mit einer Kapazität von 40kWh und lege ihre Parametern entsprechend den Datenblatt fest
+LiB.set_degradation_factors(1,1) # setze die Degradation der Kapazität und der Leistung jeweils auf 1% pro Jahr
+LiB.set_standby_losses(1) # setze die Standby-Verluste auf 1% pro Stunde
+LiB.set_resolution_in_minutes(30) # Zeitliche Auflösung der Berechnungder Simulation auf 30 min
 
-pv = PV_System()
-pv.load_profile(PV_PROFILE_PATH)
-pv.size_pv_system(40) # Pv system seize in kW
+pv = PV_System() # erzeugt ein Objekt der Klasse PVSystem
+pv.load_profile(PV_PROFILE_PATH)  # liest die PV-Daten aus der csv-datei ein.
+pv.size_pv_system(100) # Skaliert die PV-Anlage nach Leistung in kW
 
-consumer = Consumer()
-consumer.load_profile(CONSUMER_PROFILE_PATH)
+consumer = Consumption() # erzeugt ein Objekt der Klasse Consumption
+consumer.load_profile(CONSUMER_PROFILE_PATH) # liest der Lastprofil aus der csv-datei ein.
 
 # Rf = factory.create_RFB_eisen_salz_VoltStorage_from_parameter("capacity", 40)
 # Rf.set_degradation_factors(1,1)
 # Rf.modify_power(15,5)
 # Rf.set_operation_consumption(0.25*Rf.max_power)
 # Rf.print_info()
-# Rf.set_resolution_in_minutes(15)
+# Rf.set_resolution_in_minutes(30)
 
+energySystem = EnergySystem(consumer,LiB,pv) # erzeugt ein Energiesystem, von der Klasse EnergySystem, mit den eingelesenen Lastprofile, PV-Daten und die neue dimensionierte Batterie
+energySystem.print_info() # Darstellt die Systemkenndaten
+energySystem.simulate() # Ausführung der Simulation
 
-energySystem = EnergySystem(consumer,LiB,pv)
-energySystem.simulate()
-energySystem.save_as_excel(energySystem.battery.technology)
-
-eco_analyzer = Eco_Analyzer(energySystem.simulation_result)
+eco_analyzer = SustainabilityEvaluator(energySystem.simulation_result)
 eco_analyzer.print_info()
 
-finance_analyzer = Financial_Analyzer(energySystem.simulation_result)
-finance_analyzer.set_energy_cost(0.3) # Energiekosten in €
-finance_analyzer.set_feedIn_remuneration(0.065) # Einspeisung Vergütung in €
+finance_analyzer = FinancialEvaluator(energySystem.simulation_result, LiB)
+finance_analyzer.set_energy_cost(0.18) # Energiekosten in €/kWh
+finance_analyzer.set_feedIn_remuneration(0.063) # Einspeisung Vergütung in €
 finance_analyzer.calculate_savings() # Savings for one year in €
 finance_analyzer.print_info()
 

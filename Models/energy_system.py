@@ -1,16 +1,16 @@
 import pandas as pd
-from Models.Consumer import Consumer
-from Models.Battery import Battery
-from Models.PVSystem import PV_System
-from Models.dependecies.SimulationResult import SimulationResult
+from models.consumption import Consumption
+from models.battery import Battery
+from models.pv_system import PV_System
+from models.dependecies.SimulationResult import SimulationResult
 
 class EnergySystem:
     
-    def __init__(self, consumer: Consumer, battery: Battery, pvSystem: PV_System):
-        self.consumer = consumer
-        self.pvSystem = pvSystem
+    def __init__(self, consumption: Consumption, battery: Battery, pv_system: PV_System):
+        self.consumer = consumption
+        self.pvSystem = pv_system
         self.battery = battery
-        self.checkDataFrames()
+        self.checkDataFrames() # Überprüft dass die Dataframe (Profiles) der Consumption und PV-Anlage genau groß sind
 
         self.simulation_result = SimulationResult(self.battery)
     
@@ -18,27 +18,25 @@ class EnergySystem:
         max_counts = self.consumer.get_profile_count()-1
         for i in range(0,max_counts):
 
-            uhrzeit = self.consumer.profile.loc[i,"Uhrzeit"]
-            consumption = self.consumer.profile.loc[i,"Leistung"]
-            generation = self.pvSystem.profile.loc[i,"Leistung"]
-            demandedPower = float(generation)-float(consumption)
+            current_time = self.consumer.profile.loc[i,"Uhrzeit"] # liest die Zeit Zeilenweise
+            consumption = self.consumer.profile.loc[i,"Leistung"] # liest die Lasthoche
+            generation = self.pvSystem.profile.loc[i,"Leistung"] # liest die generierte Leistung vom PV-System Zeilenweise
+            power_difference = generation-consumption # berechnet die Liestungsunterschied
             
-            self.battery.simulate_responde(demandedPower)
-            battery_power = self.battery.power_throuhput
-            battery_energy_change = self.battery.stateChange
+            self.battery.simulate_responde(power_difference)
             
-            new_row = pd.DataFrame({'Uhrzeit': uhrzeit, 'PV Erzeugung [kW]': generation, 'Verbrauch [kW]': consumption,
-            'Netz Nutzung [kW]' : round(self.__calcualte_grid_use(generation, consumption, battery_energy_change),2),
-            'Gedeckter Verbrauch aus PV [kW]' : round(self.__calculate_consumption_conver_by_pv(generation, consumption)),
-            'Einspeisung PV [kW]': self.__calculate_pv_feed(generation, consumption, battery_energy_change),
-            'Battery Leistungsdurchsatz [kW]': round(demandedPower, 2), 'Battery Ladezustand [kWh]': round(self.battery.state,5),
-            'Ladungänderung [kWh]' : round(battery_energy_change,2) ,
-            'Battery Betrieb Verbrauch [kW]' : self.battery.current_operation_consumption,
-            'Battery Betrieb Energie [kWh]' :self.battery.operation_energy},
+            new_row = pd.DataFrame({'Uhrzeit': current_time, 'PV Erzeugung [kW]': generation, 'Verbrauch [kW]': consumption,
+            'Netz Nutzung [kW]' : self.__calcualte_grid_use(generation, consumption, self.battery.charge_change),
+            'Gedeckter Verbrauch aus PV [kW]' : self.__calculate_consumption_conver_by_pv(generation, consumption),
+            'Einspeisung PV [kW]': self.__calculate_pv_feed(generation, consumption, self.battery.charge_change),
+            'Verbrauch-Erzeugung Leistungsunterschied [kW]': power_difference, 
+            'Battery Ladezustand [kWh]': self.battery.state_of_charge,
+            'Ladungsänderung [kWh]' : self.battery.charge_change,
+            'Batterie Betrieb Verbrauch [kW]' : self.battery.current_operation_consumption,
+            'Batterie Betrieb Energie [kWh]' :self.battery.operation_energy},
             index = [0])
 
             self.simulation_result.add_new_row(new_row)
-
             self.__show_simulation_progess(i,max_counts)
     
         self.simulation_result.df = self.simulation_result.df.sort_index(ascending=False)

@@ -1,6 +1,6 @@
-from Models.dependecies.SimulationResult import SimulationResult
+from models.dependecies.SimulationResult import SimulationResult
 
-class Eco_Analyzer:
+class SustainabilityEvaluator:
     def __init__(self, simulated_data: SimulationResult) -> None:
         self.simulated_data =simulated_data
         self.contribution_margin = self.__calculate_contribution_margin()

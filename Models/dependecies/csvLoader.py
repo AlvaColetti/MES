@@ -1,8 +1,5 @@
 import pandas as pd
 import string
-from tkinter.tix import MAX
-from tokenize import Double
-from typing_extensions import Self
 
 class CsvLoader:
     def __init__(self) -> None:

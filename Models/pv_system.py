@@ -1,4 +1,4 @@
-from Models.dependecies.csvLoader import CsvLoader
+from models.dependecies.csvLoader import CsvLoader
 
 
 class PV_System(CsvLoader):

@@ -2,7 +2,7 @@ import numpy
 
 class Battery:
 
-    def __init__(self, capacity: float, minPower:float, maxPower: float, initialState: float = 0 ):
+    def __init__(self, capacity: float, minPower:float, maxPower: float, initial_state_of_charge: float = 0 ):
         """ 
         Retunrs
         --------
@@ -24,35 +24,35 @@ class Battery:
     
         """
         # capacity
-        self.capacity = capacity # max capacity in kWh
-        self.state = initialState # current state in kWh
-        self.stateChange = 0 # energy change in kWh
+        self.capacity = capacity # maximale Kapazität in kWh
+        self.state_of_charge = initial_state_of_charge # Aktuele Ladungszustand in kWh
+        self.charge_change = 0 # Ladungsänderung in kWh
 
         # power
-        self.max_power = maxPower # max power in kW
-        self.min_power = minPower # min power in kW
-        self.power_throuhput = 0 # current power in kW
+        self.max_power = maxPower # Maximale Leistung in kW
+        self.min_power = minPower # Minimale Leistung in kW
+        self.regulated_power = 0 # Leistung zu/aus der Batterie in kW
 
         # efficiencies
-        self.chargingEffiency = 1
-        self.dechargingEffiency = 1
-        self.standByLosses = 0
+        self.chargingEffiency = 1 # Verluste bei Ladung in %
+        self.dechargingEffiency = 1 # Verluste bei Entladung in %
+        self.standByLosses = 0 # Verluste bei Standby in %
 
         # operation consumption
-        self.operation_consumption = 0
+        self.operation_consumption = 0 
         self.current_operation_consumption = 0
         self.operation_energy = 0
 
         # simulation parameters
-        self.Resolution = 1 # simulation resolution in minutes
-        self.technology = "Undefined"
+        self.Resolution = 1 # zeitliche Auflösung der Simulation
+        self.technology = "Undefined" # Art der Technologie 
 
         #Cost
-        self.installation_cost = 0 #In Euro
+        self.installation_cost = 0 # Installationskosten in Euro
 
         #Degradation factors
-        self.capacity_degradation = 0 # degradation % per year
-        self.power_degradation = 0 # degradation % per year of maximum power
+        self.capacity_degradation = 0 # Degradation in % per year
+        self.power_degradation = 0 # Degradation % per year of maximum power
     
     def set_operation_consumption(self, operation_consumption: float):
         """ 
@@ -85,12 +85,12 @@ class Battery:
         self.chargingEffiency = chargingEffiency/100
         self.dechargingEffiency = dechargingEfficiency/100
     
-    def simulate_responde(self, demandedPower):
-        self.state = self.state*self.__calculate_standby_efficiency()
-        self.calculate_power_throuhput(demandedPower)
-        demanded_energy = self.calculate_demanded_energy()
-        self.calculate_state_energy_change(demanded_energy)
-        self.degradate()
+    def simulate_responde(self, power_difference):
+        self.state_of_charge = self.state_of_charge*self.__calculate_standby_efficiency() # Aktuellen Ladezustand nach Standby-Verlust einstellen
+        self.calculate_regulated_power(power_difference) # Berechnung der eingestellte Leistung der Batterie
+        needed_capacity = self.calculate_needed_capacity() # Berechnung der notwendige Kapazität im ideal Fall
+        self.calculate_state_charge_change(needed_capacity) # Berechnung der Änderung der Ladezustand
+        self.degradate() # Ausführung der degradation
     
     def set_standby_losses(self, hourly_loss: float):
         """
@@ -123,45 +123,48 @@ class Battery:
     def __calculate_standby_efficiency(self):
         return (1-(self.standByLosses/100)*self.Resolution)
 
-    def calculate_state_energy_change(self, demandedEnergy):
-        previousState = self.state
-        
-        if demandedEnergy >0:
-            a =10
+    def calculate_state_charge_change(self, demandedEnergy):
+        previousState = self.state_of_charge
 
-        if self.state + demandedEnergy >= self.capacity:
-            self.state = self.capacity
-        elif self.state + demandedEnergy < 0:
-            self.state = 0
+        if self.state_of_charge + demandedEnergy >= self.capacity:
+            self.state_of_charge = self.capacity
+        elif self.state_of_charge + demandedEnergy < 0:
+            self.state_of_charge = 0
         else:
-            self.state = self.state + demandedEnergy
+            self.state_of_charge = self.state_of_charge + demandedEnergy
         
+        self.charge_change = self.state_of_charge - previousState
 
-
-        self.stateChange = self.state - previousState
+        self.__check_energy_consumption_ratio(previousState)
     
-    def calculate_power_throuhput(self, demandedPower: float):
+    def calculate_regulated_power(self, demandedPower: float):
         
         if self.min_power > abs(demandedPower):
-            self.power_throuhput = 0
+            self.regulated_power = 0
             self.current_operation_consumption = 0
 
         elif self.max_power <= abs(demandedPower):
-            self.power_throuhput = self.max_power*numpy.sign(demandedPower)
+            self.regulated_power = self.max_power*numpy.sign(demandedPower)
             self.current_operation_consumption = self.operation_consumption
 
         elif self.max_power > abs(demandedPower) and self.min_power <= abs(demandedPower):
-            self.power_throuhput = demandedPower
+            self.regulated_power = demandedPower
             self.current_operation_consumption = self.operation_consumption
     
-    def calculate_demanded_energy(self):
-
-        self.operation_energy = self.current_operation_consumption*self.Resolution
-
-        if numpy.sign(self.power_throuhput) == 1:
-            return (self.power_throuhput * self.chargingEffiency) * self.Resolution - self.operation_energy
+    def calculate_needed_capacity(self):
+        if numpy.sign(self.regulated_power) == 1:
+            return (self.regulated_power * self.chargingEffiency) * self.Resolution
         else:
-            return (self.power_throuhput / self.dechargingEffiency) * self.Resolution - self.operation_energy
+            return (self.regulated_power / self.dechargingEffiency) * self.Resolution
+    
+    def __check_energy_consumption_ratio(self, previousState: float):
+        self.operation_energy = self.current_operation_consumption * self.Resolution
+        
+        if (abs(self.charge_change) < self.current_operation_consumption*self.Resolution):
+            self.operation_energy = 0
+            self.charge_change = 0
+            self.state_of_charge = previousState
+            self.current_operation_consumption = 0
 
     def setCost(self, installationCost: float):
         self.installation_cost = installationCost
@@ -176,7 +179,6 @@ class Battery:
 
     def degradate(self):
         minutes_per_year = 365 * 24 * 60
-        
         self.max_power = round( self.max_power * ( 1 - (self.power_degradation / 100 /  minutes_per_year) * self.Resolution), 2)
         self.capacity = round( self.capacity * ( 1 - (self.capacity_degradation / 100 /  minutes_per_year) * self.Resolution), 2)
 

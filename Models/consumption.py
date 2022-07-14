@@ -1,11 +1,6 @@
-from tokenize import Double
-from typing_extensions import Self
+from models.dependecies.csvLoader import CsvLoader
 
-import pandas as pd
-
-from Models.dependecies.csvLoader import CsvLoader
-
-class Consumer(CsvLoader):
+class Consumption(CsvLoader):
     def __init__(self) -> None:
         pass
 

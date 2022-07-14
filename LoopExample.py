@@ -1,52 +1,55 @@
-from matplotlib import markers
-from Models.Consumer import Consumer
-from Models.PVSystem import PV_System
-from Models.EnergySystem import EnergySystem
-from Models.analyzers.eco_analyzer import Eco_Analyzer
-from Models.analyzers.financial_analyzer import Financial_Analyzer
-from Models.battery_factory import Battery_factory
+from models.consumption import Consumption
+from models.pv_system import PV_System
+from models.energy_system import EnergySystem
+from models.simulation_evaluators.sustainability_evaluator import SustainabilityEvaluator
+from models.simulation_evaluators.financial_analyzer import FinancialEvaluator
+from models.battery_factory import BatteryFactory
 import matplotlib.pyplot as plt
 
 PV_PROFILE_PATH = "C:\\Users\\alva-coletti\\Desktop\\MES\\Profiles\\PV_Production.csv"
 CONSUMER_PROFILE_PATH = "C:\\Users\\alva-coletti\\Desktop\\MES\\Profiles\\Load_Production.csv"
 
-factory = Battery_factory()
+factory = BatteryFactory()
+
+capacities = [76,100]
+
+for cap in capacities:
+    x_achse = []
+    deckungs_grad = []
+    for i in range(1,8):
+        LiB = factory.create_LiB_NMC_TestVolt_from_parameter("capacity", cap) #Building battery according to characteristic
+        LiB.set_degradation_factors(1,1) #Degradation for power and capacity in %/a
+        LiB.set_standby_losses(0) #losses per hour in %/h
+        LiB.set_resolution_in_minutes(30) # setting system resolution
+        LiB.max_power = 2.5 * (i-1)
+
+        pv = PV_System()
+        pv.load_profile(PV_PROFILE_PATH)
+        pv_power = 150
+        pv.size_pv_system(pv_power)
+
+        consumer = Consumption()
+        consumer.load_profile(CONSUMER_PROFILE_PATH)
+
+        energySystem = EnergySystem(consumer,LiB,pv)
+        energySystem.print_info()
+        energySystem.simulate()
+
+        eco_analyzer = SustainabilityEvaluator(energySystem.simulation_result)
+
+        x_achse.append(LiB.max_power)
+        deckungs_grad.append(round(eco_analyzer.contribution_margin * 100 , 2))
+
+    plt.plot(x_achse, deckungs_grad, marker="o", label= LiB.technology + " mit " + str(cap) + " kWh Kapazität")
+    print(deckungs_grad)
 
 
-pv_powers = []
-deckungs_grad = []
-
-for i in range(1,8):
-
-    LiB = factory.create_LiB_LFP_BYD_from_parameter("capacity", 40) #Building battery according to characteristic
-    LiB.set_degradation_factors(1,1) #Degradation for power and capacity in %/a
-    LiB.set_standby_losses(1) #losses per hour in %/h
-    LiB.set_resolution_in_minutes(30) # setting system resolution
-
-    pv = PV_System()
-    pv.load_profile(PV_PROFILE_PATH)
-    pv_power = 20 * i
-    pv.size_pv_system(pv_power)
-
-    consumer = Consumer()
-    consumer.load_profile(CONSUMER_PROFILE_PATH)
-
-    energySystem = EnergySystem(consumer,LiB,pv)
-    energySystem.print_info()
-    energySystem.simulate()
-
-    eco_analyzer = Eco_Analyzer(energySystem.simulation_result)
-
-    pv_powers.append(pv_power)
-    deckungs_grad.append(round(eco_analyzer.contribution_margin * 100,2))
-
-
-plt.plot(pv_powers, deckungs_grad, marker="o")
-plt.xlim(0, 160)
-plt.ylim(0,80)
-plt.title("System Simulation with Lib Battery")
+plt.xlim(5, 17.5)
+plt.ylim(40,80)
+plt.title("Systemsimulation mit" + LiB.technology + " und " + str(pv.installed_power) + " % Solarfeld")
 plt.ylabel("Solarer Deckungsgrad [%]")
-plt.xlabel("PV Leistung [kW]")
+plt.xlabel("Leistung der Batterie [kW]")
+plt.legend()
 plt.grid()
 plt.show()
 
